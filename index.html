@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0A0A0A">
+<title>Ampil</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  html,body{height:100%}
+  body{background:#0A0A0A;color:#F2F2F4;font-family:Sora,system-ui,-apple-system,'Segoe UI',sans-serif;-webkit-tap-highlight-color:transparent;overscroll-behavior:none;user-select:none}
+  .dial{position:relative;width:min(100%,340px);aspect-ratio:1;margin:0 auto;touch-action:none;cursor:pointer;outline-offset:6px}
+  .dial svg{width:100%;height:100%;overflow:visible}
+  .arc{transition:stroke-dasharray .3s cubic-bezier(.2,.9,.3,1),opacity .25s,filter .25s}
+  .knob{transition:cx .3s cubic-bezier(.2,.9,.3,1),cy .3s cubic-bezier(.2,.9,.3,1),opacity .25s}
+  .dial.drag .arc,.dial.drag .knob{transition:opacity .25s,filter .25s}
+  .centerlbl{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none;text-align:center}
+  .row{display:flex;align-items:center;gap:14px;padding:12px 12px 12px 14px;border-radius:24px;background:#141416;box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.06);transition:box-shadow .25s,background .25s;cursor:pointer}
+  .row.sel{background:#1A1A1D;box-shadow:inset 0 0 0 1.5px var(--c),0 0 28px -8px var(--c)}
+  .chip{width:40px;height:40px;border-radius:14px;display:grid;place-items:center;background:color-mix(in srgb,var(--c) 22%,transparent);flex:none}
+  .row.off .chip{filter:grayscale(1);opacity:.55}
+  .mbtn{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;background:rgba(255,255,255,.07);transition:transform .15s,background .2s;flex:none}
+  .mbtn:active{transform:scale(.86)}
+  .big{height:68px;border-radius:24px;font-weight:700;font-size:14px;letter-spacing:.02em;display:flex;align-items:center;justify-content:center;gap:10px;transition:transform .15s,box-shadow .3s,filter .3s}
+  .big:active{transform:scale(.96)}
+  #muteAll{background:linear-gradient(150deg,#FF5C6C,#D91A40);box-shadow:0 10px 30px -10px rgba(255,70,90,.7)}
+  #vibe{background:linear-gradient(150deg,#5BA0FF,#2F5BFF);box-shadow:0 10px 30px -10px rgba(70,120,255,.7)}
+  .big.on{box-shadow:0 0 0 3px #0A0A0A,0 0 0 5px #fff}
+  #bubble{position:fixed;width:60px;height:60px;border-radius:50%;z-index:30;display:grid;place-items:center;touch-action:none;cursor:grab;background:#F2F2F4;color:#0A0A0A;box-shadow:0 12px 30px rgba(0,0,0,.7),0 0 0 6px rgba(255,255,255,.1);transition:transform .2s}
+  #bubble.drag{transform:scale(1.12);cursor:grabbing}
+  #toast{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 12px);transform:translate(-50%,-90px);transition:transform .35s cubic-bezier(.2,.9,.3,1.2);z-index:40;padding:11px 20px;border-radius:999px;background:#F2F2F4;color:#0A0A0A;font-size:13px;font-weight:600;white-space:nowrap}
+  #toast.show{transform:translate(-50%,0)}
+  .wrap{padding-top:env(safe-area-inset-top,0px);padding-bottom:calc(env(safe-area-inset-bottom,0px) + 24px)}
+  :focus-visible{outline:2px solid #fff}
+  @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div id="toast" role="status" aria-live="polite"></div>
+<main class="wrap mx-auto flex min-h-full w-full max-w-md flex-col px-5">
+  <header class="flex items-center justify-between pb-4 pt-5">
+    <div class="flex items-center gap-3">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#F2F2F4" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4V5z" fill="#F2F2F4"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg>
+      <h1 class="text-[22px] font-extrabold tracking-tight">Ampil</h1>
+    </div>
+    <button class="mbtn" aria-label="Settings" onclick="toast('Settings coming soon')"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#F2F2F4" stroke-width="1.9" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg></button>
+  </header>
+
+  <div id="dial" class="dial" tabindex="0" role="group" aria-label="Volume rings. Arrow left and right change volume, up and down switch channel.">
+    <svg viewBox="0 0 320 320" id="rings"></svg>
+    <div class="centerlbl"><div>
+      <p id="cName" class="text-[13px] font-semibold text-white/55"></p>
+      <p class="mt-1 flex items-start justify-center leading-none"><span id="cNum" class="text-[64px] font-extrabold tabular-nums tracking-tight">0</span><span class="mt-2 text-[18px] font-bold text-white/50">%</span></p>
+    </div></div>
+  </div>
+  <p id="status" class="mb-5 mt-1 text-center text-[13px] text-white/45">Drag around a ring to set its volume</p>
+
+  <section id="rows" class="flex flex-col gap-2.5"></section>
+
+  <div class="mt-5 grid grid-cols-2 gap-3.5">
+    <button id="muteAll" class="big"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4V5z" fill="#fff"/><path d="m22 9-6 6m0-6 6 6"/></svg><span id="muteAllLbl">MUTE ALL</span></button>
+    <button id="vibe" class="big"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="3" width="8" height="18" rx="2"/><path d="M3.5 8v8M20.5 8v8"/></svg>VIBRATE MODE</button>
+  </div>
+</main>
+
+<button id="bubble" aria-label="Floating volume bubble"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4V5z" fill="currentColor"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg></button>
+
+<script>
+const ic = p => `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--c)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+const CH = [
+  {id:'media', name:'Media', v:70, c:'#9B8CFF', r:140, icon:ic('<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3" fill="var(--c)"/><circle cx="18" cy="16" r="3" fill="var(--c)"/>')},
+  {id:'ring', name:'Ring', v:55, c:'#34E0A1', r:112, icon:ic('<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z" fill="var(--c)"/>')},
+  {id:'alarm', name:'Alarm', v:85, c:'#FFB52E', r:84, icon:ic('<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M5 3 2 6M22 6l-3-3"/>')},
+  {id:'notif', name:'Notification', v:40, c:'#FF5F92', r:56, icon:ic('<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" fill="var(--c)"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>')}
+];
+const spk = m => `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#F2F2F4" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4V5z" fill="#F2F2F4"/>${m?'<path d="m22 9-6 6m0-6 6 6"/>':'<path d="M15.5 8.5a5 5 0 0 1 0 7"/>'}</svg>`;
+const buzz = n => { try { navigator.vibrate && navigator.vibrate(n); } catch(e){} };
+const $ = s => document.querySelector(s);
+const clamp = (n,a,b) => Math.max(a,Math.min(b,n));
+let tt; function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('show'),1800);}
+
+const SW=22, SPAN=270, START=135, NS='http://www.w3.org/2000/svg';
+const S={}, P={}; let sel=0;
+const mk=(tag,attrs,parent)=>{const e=document.createElementNS(NS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);parent.appendChild(e);return e;};
+
+CH.forEach((ch,i)=>{
+  S[ch.id]=ch.v; P[ch.id]=ch.v;
+  const C=2*Math.PI*ch.r, L=C*SPAN/360;
+  const g=mk('g',{},$('#rings'));
+  const base={cx:160,cy:160,r:ch.r,fill:'none','stroke-width':SW,'stroke-linecap':'round',transform:`rotate(${START} 160 160)`};
+  mk('circle',{...base,stroke:'rgba(255,255,255,.07)','stroke-dasharray':`${L} ${C}`},g);
+  ch.arc=mk('circle',{...base,stroke:ch.c,'stroke-dasharray':`0 ${C}`,class:'arc'},g);
+  ch.knob=mk('circle',{r:5,fill:'#fff',class:'knob'},g);
+  ch.C=C; ch.L=L;
+
+  const row=document.createElement('div');
+  row.className='row'; row.style.setProperty('--c',ch.c);
+  row.innerHTML=`<div class="chip">${ch.icon}</div><div class="min-w-0 flex-1"><p class="text-[15px] font-semibold leading-tight">${ch.name}</p><p data-sub class="text-xs text-white/45"></p></div><span class="mr-1 text-[22px] font-bold tabular-nums"><span data-n>0</span><span class="text-sm text-white/45">%</span></span><button class="mbtn" data-m aria-label="Mute ${ch.name}"></button>`;
+  $('#rows').appendChild(row); ch.row=row;
+  row.addEventListener('click',e=>{ if(e.target.closest('[data-m]'))return; select(i); buzz(10); });
+  row.querySelector('[data-m]').addEventListener('click',()=>{
+    buzz(20); select(i);
+    if(S[ch.id]>0){P[ch.id]=S[ch.id];ch.set(0);toast(ch.name+' muted');}
+    else{ch.set(P[ch.id]||50);toast(ch.name+' restored');}
+  });
+
+  ch.set=v=>{
+    v=Math.round(clamp(v,0,100)); S[ch.id]=v; if(v>0)P[ch.id]=v;
+    ch.arc.setAttribute('stroke-dasharray',`${L*v/100} ${C}`);
+    const a=(START+SPAN*v/100)*Math.PI/180;
+    ch.knob.setAttribute('cx',160+ch.r*Math.cos(a)); ch.knob.setAttribute('cy',160+ch.r*Math.sin(a));
+    ch.knob.style.opacity=v===0?.0:1; ch.arc.style.opacity=v===0?0:'';
+    ch.row.querySelector('[data-n]').textContent=v;
+    ch.row.querySelector('[data-sub]').textContent=v===0?'Muted':v<34?'Low':v<67?'Medium':'Loud';
+    ch.row.querySelector('[data-m]').innerHTML=spk(v===0);
+    ch.row.classList.toggle('off',v===0);
+    paint(); sync();
+  };
+});
+function paint(){
+  CH.forEach((c,i)=>{
+    const on=i===sel, on0=S[c.id]>0;
+    c.arc.style.filter=on?`drop-shadow(0 0 9px ${c.c})`:'';
+    if(on0)c.arc.style.opacity=on?1:.45;
+    c.knob.style.opacity=on0&&on?1:0;
+    c.row.classList.toggle('sel',on);
+  });
+  const c=CH[sel]; $('#cName').textContent=c.name; $('#cNum').textContent=S[c.id]; $('#cNum').style.color=S[c.id]?'#F2F2F4':'rgba(242,242,244,.4)';
+}
+function select(i){sel=i;paint();}
+
+/* dial interaction: pick the nearest ring, then follow the angle */
+const dial=$('#dial'); let drag=false, last=0;
+function pt(e){const r=dial.getBoundingClientRect(),k=320/r.width;return{x:(e.clientX-r.left)*k-160,y:(e.clientY-r.top)*k-160};}
+function toVal(p){let t=Math.atan2(p.y,p.x)*180/Math.PI;t=(t+360)%360;let rel=(t-START+360)%360;if(rel>SPAN)rel=rel<315?SPAN:0;return rel/SPAN*100;}
+function apply(e){
+  let v=toVal(pt(e));
+  if(last>85&&v<15)v=100; else if(last<15&&v>85)v=0;
+  if(Math.floor(v/5)!==Math.floor(last/5)||v===0||v===100)buzz(10);
+  last=v; CH[sel].set(v);
+}
+dial.addEventListener('pointerdown',e=>{
+  const p=pt(e),d=Math.hypot(p.x,p.y);
+  if(d<36||d>172)return;
+  let best=0,bd=1e9;CH.forEach((c,i)=>{const x=Math.abs(d-c.r);if(x<bd){bd=x;best=i;}});
+  sel=best; drag=true; last=S[CH[sel].id];
+  dial.setPointerCapture(e.pointerId); dial.classList.add('drag'); apply(e);
+});
+dial.addEventListener('pointermove',e=>{if(drag)apply(e);});
+['pointerup','pointercancel'].forEach(t=>dial.addEventListener(t,()=>{drag=false;dial.classList.remove('drag');}));
+dial.addEventListener('keydown',e=>{
+  const c=CH[sel],d={ArrowRight:5,ArrowLeft:-5}[e.key];
+  if(d){e.preventDefault();buzz(10);c.set(S[c.id]+d);}
+  else if(e.key==='ArrowUp'){e.preventDefault();select((sel+3)%4);}
+  else if(e.key==='ArrowDown'){e.preventDefault();select((sel+1)%4);}
+});
+
+let vibeOn=false,saved={};
+function sync(){
+  const off=CH.filter(c=>S[c.id]===0).length,all=off===4;
+  $('#muteAll').classList.toggle('on',all);
+  $('#muteAllLbl').textContent=all?'UNMUTE ALL':'MUTE ALL';
+  $('#status').textContent=vibeOn?'Vibrate mode is on':all?'Everything is muted':off?`${off} of 4 muted`:'Drag around a ring to set its volume';
+  $('#bubble').style.opacity=S.media===0?.6:1;
+}
+$('#muteAll').addEventListener('click',()=>{
+  const all=CH.every(c=>S[c.id]===0);buzz([20,40,20]);
+  if(all){CH.forEach(c=>c.set(P[c.id]||50));toast('Sound restored');}
+  else{CH.forEach(c=>{if(S[c.id]>0)P[c.id]=S[c.id];c.set(0);});toast('Everything muted');}
+});
+$('#vibe').addEventListener('click',()=>{
+  vibeOn=!vibeOn;$('#vibe').classList.toggle('on',vibeOn);
+  const t=['ring','notif'].map(id=>CH.find(c=>c.id===id));
+  if(vibeOn){t.forEach(c=>{saved[c.id]=S[c.id]||P[c.id];c.set(0);});buzz([80,60,80]);toast('Vibrate mode on');}
+  else{t.forEach(c=>c.set(saved[c.id]||50));buzz(20);toast('Vibrate mode off');}
+  sync();
+});
+CH.forEach(c=>c.set(c.v)); select(0);
+
+/* Floating bubble */
+const B=$('#bubble');B.style.right='16px';B.style.bottom='calc(env(safe-area-inset-bottom,0px) + 110px)';
+let bx,by,sx,sy,mv=false;
+B.addEventListener('pointerdown',e=>{B.setPointerCapture(e.pointerId);B.classList.add('drag');const r=B.getBoundingClientRect();B.style.right=B.style.bottom='auto';B.style.left=r.left+'px';B.style.top=r.top+'px';bx=r.left;by=r.top;sx=e.clientX;sy=e.clientY;mv=false;});
+B.addEventListener('pointermove',e=>{if(!B.hasPointerCapture(e.pointerId))return;const dx=e.clientX-sx,dy=e.clientY-sy;if(Math.abs(dx)+Math.abs(dy)>5)mv=true;B.style.left=clamp(bx+dx,6,innerWidth-66)+'px';B.style.top=clamp(by+dy,6,innerHeight-66)+'px';});
+B.addEventListener('pointerup',()=>{B.classList.remove('drag');const r=B.getBoundingClientRect();B.style.transition='left .3s cubic-bezier(.2,.9,.3,1.1),transform .2s';B.style.left=(r.left+30<innerWidth/2?10:innerWidth-70)+'px';setTimeout(()=>B.style.transition='transform .2s',320);if(!mv){buzz(15);toast('Media volume '+S.media+'%');}else buzz(10);});
+</script>
+</body>
+</html>
