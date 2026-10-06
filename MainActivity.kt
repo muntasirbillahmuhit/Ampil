@@ -1,6 +1,7 @@
 package com.ampil.app
 
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.Activity
 import android.content.ComponentName
 import android.content.Context
@@ -9,12 +10,14 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.media.AudioManager
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.text.TextUtils
 import android.util.TypedValue
 import android.view.Gravity
-import android.view.View
+import android.view.accessibility.AccessibilityManager
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -23,8 +26,8 @@ import android.widget.TextView
 /**
  * MainActivity
  *
- * Provides status verification for the VolumeAccessibilityService,
- * a direct shortcut to Android Accessibility Settings, and testing controls.
+ * Provides service verification, direct accessibility activation intent,
+ * and Android 13+ "Restricted Setting" unblocker.
  */
 class MainActivity : Activity() {
 
@@ -43,11 +46,11 @@ class MainActivity : Activity() {
 
         val layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dpToPx(24), dpToPx(48), dpToPx(24), dpToPx(32))
+            setPadding(dpToPx(20), dpToPx(40), dpToPx(20), dpToPx(32))
             gravity = Gravity.CENTER_HORIZONTAL
         }
 
-        // App Header
+        // App Title
         val titleText = TextView(this).apply {
             text = "Ampil"
             textSize = 28f
@@ -57,19 +60,19 @@ class MainActivity : Activity() {
         }
         val subtitleText = TextView(this).apply {
             text = "Hardware-free Gesture & Floating Volume Control"
-            textSize = 14f
+            textSize = 13f
             setTextColor(Color.parseColor("#888888"))
             gravity = Gravity.CENTER
-            setPadding(0, dpToPx(4), 0, dpToPx(32))
+            setPadding(0, dpToPx(4), 0, dpToPx(24))
         }
 
-        // Status Card
+        // Live Service Status Card
         val statusCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dpToPx(20), dpToPx(20), dpToPx(20), dpToPx(20))
+            setPadding(dpToPx(16), dpToPx(18), dpToPx(16), dpToPx(18))
             background = GradientDrawable().apply {
                 setColor(Color.parseColor("#141416"))
-                cornerRadius = dpToPx(20).toFloat()
+                cornerRadius = dpToPx(18).toFloat()
                 setStroke(dpToPx(1), Color.parseColor("#1AFFFFFF"))
             }
             gravity = Gravity.CENTER_HORIZONTAL
@@ -90,15 +93,15 @@ class MainActivity : Activity() {
             textSize = 13f
             setTextColor(Color.parseColor("#AAAAAA"))
             gravity = Gravity.CENTER
-            setPadding(0, dpToPx(12), 0, 0)
+            setPadding(0, dpToPx(10), 0, 0)
         }
 
         statusCard.addView(statusBadge)
         statusCard.addView(statusDescription)
 
-        // Enable Accessibility Button
+        // Main Action: Enable Accessibility Button
         val btnEnable = Button(this).apply {
-            text = "Enable Accessibility"
+            text = "1. Open Accessibility Settings"
             setTextColor(Color.WHITE)
             textSize = 15f
             typeface = Typeface.DEFAULT_BOLD
@@ -108,22 +111,77 @@ class MainActivity : Activity() {
             }
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                dpToPx(56)
+                dpToPx(54)
             ).apply {
-                setMargins(0, dpToPx(24), 0, dpToPx(16))
+                setMargins(0, dpToPx(20), 0, dpToPx(12))
             }
             setOnClickListener {
                 openAccessibilitySettings()
             }
         }
 
-        // Quick Test Buttons Section
-        val testHeader = TextView(this).apply {
-            text = "Test Volume Controls"
-            textSize = 14f
-            setTextColor(Color.parseColor("#666666"))
+        // Android 13+ Restricted Setting Helper Button
+        val btnRestrictedSettings = Button(this).apply {
+            text = "⚠️ Sideloaded APK? Allow Restricted Settings"
+            setTextColor(Color.parseColor("#FFB52E"))
+            textSize = 13f
             typeface = Typeface.DEFAULT_BOLD
-            setPadding(0, dpToPx(16), 0, dpToPx(8))
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#1A1A1D"))
+                cornerRadius = dpToPx(14).toFloat()
+                setStroke(dpToPx(1), Color.parseColor("#33FFB52E"))
+            }
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(48)
+            ).apply {
+                setMargins(0, 0, 0, dpToPx(20))
+            }
+            setOnClickListener {
+                openAppDetailsSettings()
+            }
+        }
+
+        // Step-by-Step Instructions Card
+        val guideCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dpToPx(16), dpToPx(16), dpToPx(16), dpToPx(16))
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#121214"))
+                cornerRadius = dpToPx(16).toFloat()
+                setStroke(dpToPx(1), Color.parseColor("#10FFFFFF"))
+            }
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        }
+
+        val guideTitle = TextView(this).apply {
+            text = "How to Enable on Android:"
+            textSize = 14f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.WHITE)
+            setPadding(0, 0, 0, dpToPx(8))
+        }
+
+        val guideSteps = TextView(this).apply {
+            text = "• If 'Ampil' is grayed out (Android 13+): Tap 'Allow Restricted Settings' above → tap 3-dots in top right → 'Allow restricted settings'.\n\n• Tap 'Open Accessibility Settings' → Installed Apps / Downloaded Services → Select 'Ampil' → Toggle ON.\n\n• The floating volume bubble will immediately appear on your screen."
+            textSize = 12.5f
+            setTextColor(Color.parseColor("#888899"))
+            setLineSpacing(dpToPx(2).toFloat(), 1.1f)
+        }
+
+        guideCard.addView(guideTitle)
+        guideCard.addView(guideSteps)
+
+        // Quick Test Section
+        val testHeader = TextView(this).apply {
+            text = "Test Volume Control"
+            textSize = 13.5f
+            setTextColor(Color.parseColor("#777788"))
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(0, dpToPx(24), 0, dpToPx(8))
         }
 
         val testButtonsLayout = LinearLayout(this).apply {
@@ -149,22 +207,14 @@ class MainActivity : Activity() {
         testButtonsLayout.addView(btnRaise)
         testButtonsLayout.addView(btnPanel)
 
-        // Instructions Footer
-        val instructions = TextView(this).apply {
-            text = "Tip: Once enabled, a floating volume bubble appears on the screen.\n• Tap to toggle quick ± controls\n• Drag to reposition or snap to edge\n• Long-press to open full system volume panel"
-            textSize = 12f
-            setTextColor(Color.parseColor("#666666"))
-            setPadding(0, dpToPx(24), 0, dpToPx(16))
-            gravity = Gravity.CENTER
-        }
-
         layout.addView(titleText)
         layout.addView(subtitleText)
         layout.addView(statusCard)
         layout.addView(btnEnable)
+        layout.addView(btnRestrictedSettings)
+        layout.addView(guideCard)
         layout.addView(testHeader)
         layout.addView(testButtonsLayout)
-        layout.addView(instructions)
 
         rootScrollView.addView(layout)
         setContentView(rootScrollView)
@@ -176,30 +226,77 @@ class MainActivity : Activity() {
     }
 
     private fun openAccessibilitySettings() {
-        val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        try {
+            val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
-        startActivity(intent)
+    }
+
+    private fun openAppDetailsSettings() {
+        try {
+            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.fromParts("package", packageName, null)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     /**
-     * Checks if VolumeAccessibilityService is currently enabled in system settings.
+     * Checks if VolumeAccessibilityService is currently enabled using multiple system checks.
      */
     fun isAccessibilityServiceEnabled(context: Context, serviceClass: Class<out AccessibilityService>): Boolean {
-        val expectedServiceName = ComponentName(context, serviceClass).flattenToString()
-        val enabledServicesSetting = Settings.Secure.getString(
-            context.contentResolver,
-            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
-        ) ?: return false
-
-        val colonSplitter = TextUtils.SimpleStringSplitter(':')
-        colonSplitter.setString(enabledServicesSetting)
-        while (colonSplitter.hasNext()) {
-            val componentName = colonSplitter.next()
-            if (componentName.equals(expectedServiceName, ignoreCase = true)) {
-                return true
-            }
+        // 1. Direct in-memory running flag check
+        if (VolumeAccessibilityService.isServiceRunning) {
+            return true
         }
+
+        // 2. AccessibilityManager API check
+        try {
+            val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as? AccessibilityManager
+            val enabledList = am?.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
+            if (enabledList != null) {
+                for (info in enabledList) {
+                    val sInfo = info.resolveInfo?.serviceInfo
+                    if (sInfo != null && sInfo.packageName == context.packageName &&
+                        (sInfo.name == serviceClass.name || sInfo.name.endsWith("VolumeAccessibilityService"))) {
+                        return true
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            // Fallback to Settings.Secure
+        }
+
+        // 3. Settings.Secure check
+        try {
+            val expectedServiceName = ComponentName(context, serviceClass).flattenToString()
+            val shortExpected = ComponentName(context, serviceClass).flattenToShortString()
+            val enabledServicesSetting = Settings.Secure.getString(
+                context.contentResolver,
+                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+            ) ?: return false
+
+            val colonSplitter = TextUtils.SimpleStringSplitter(':')
+            colonSplitter.setString(enabledServicesSetting)
+            while (colonSplitter.hasNext()) {
+                val componentName = colonSplitter.next()
+                if (componentName.equals(expectedServiceName, ignoreCase = true) ||
+                    componentName.equals(shortExpected, ignoreCase = true) ||
+                    componentName.contains("VolumeAccessibilityService", ignoreCase = true)) {
+                    return true
+                }
+            }
+        } catch (e: Exception) {
+            // Ignore
+        }
+
         return false
     }
 
@@ -213,15 +310,15 @@ class MainActivity : Activity() {
                 setColor(Color.parseColor("#1F34E0A1"))
                 cornerRadius = dpToPx(12).toFloat()
             }
-            statusDescription.text = "Floating volume button is ready and active."
+            statusDescription.text = "Floating volume button is active on screen."
         } else {
-            statusBadge.text = "○ Service Disabled"
+            statusBadge.text = "○ Service Inactive"
             statusBadge.setTextColor(Color.parseColor("#FF5C6C"))
             statusBadge.background = GradientDrawable().apply {
                 setColor(Color.parseColor("#1FFF5C6C"))
                 cornerRadius = dpToPx(12).toFloat()
             }
-            statusDescription.text = "Tap 'Enable Accessibility' below to turn on Ampil."
+            statusDescription.text = "Accessibility permission is required for on-screen controls."
         }
     }
 

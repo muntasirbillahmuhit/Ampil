@@ -1,9 +1,0 @@
-{
-  "appId": "com.ampil.app",
-  "appName": "Ampil",
-  "webDir": "dist",
-  "bundledWebRuntime": false,
-  "android": {
-    "allowMixedContent": true
-  }
-}
