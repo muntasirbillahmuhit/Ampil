@@ -31,7 +31,7 @@ jobs:
       - name: Build web app
         run: npm run build
 
-      - name: Install Capacitor
+      - name: Install Capacitor CLI & Core
         run: npm install @capacitor/core @capacitor/cli @capacitor/android
 
       - name: Initialize Capacitor for ampil
@@ -42,7 +42,8 @@ jobs:
 
       - name: Add Android platform and inject Accessibility Service
         run: |
-          if [ ! -d "android/app" ]; then
+          if [ ! -f "android/gradlew" ]; then
+            rm -rf android
             npx cap add android
           fi
           # Ensure custom native accessibility service files and manifest are placed correctly
