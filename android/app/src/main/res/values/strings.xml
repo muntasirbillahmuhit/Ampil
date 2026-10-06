@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Ampil</string>
+    <string name="accessibility_desc">Ampil provides accessible gestures and an on-screen floating control to adjust device volume without relying on physical buttons.</string>
+    <string name="accessibility_summary">Control device volume via on-screen floating controls and gestures.</string>
+    <string name="enable_accessibility">Enable Accessibility</string>
+    <string name="service_enabled">Service is Active</string>
+    <string name="service_disabled">Service is Inactive</string>
+    <string name="instruction_text">Tap the button below to open Accessibility settings, locate Ampil, and toggle it ON to enable the floating volume controller.</string>
+</resources>
