@@ -52,7 +52,7 @@ jobs:
           mkdir -p android/app/src/main/res/values
           cp -f AndroidManifest.xml android/app/src/main/AndroidManifest.xml
           cp -f res/xml/accessibility_service_config.xml android/app/src/main/res/xml/accessibility_service_config.xml
-          cp -f res/values/strings.xml android/app/src/main/res/values/strings.xml
+          cp -rf res/values/* android/app/src/main/res/values/
           cp -f VolumeAccessibilityService.kt android/app/src/main/java/com/ampil/app/VolumeAccessibilityService.kt
           cp -f MainActivity.kt android/app/src/main/java/com/ampil/app/MainActivity.kt
 
@@ -63,7 +63,7 @@ jobs:
         run: |
           cp -f AndroidManifest.xml android/app/src/main/AndroidManifest.xml
           cp -f res/xml/accessibility_service_config.xml android/app/src/main/res/xml/accessibility_service_config.xml
-          cp -f res/values/strings.xml android/app/src/main/res/values/strings.xml
+          cp -rf res/values/* android/app/src/main/res/values/
           cp -f VolumeAccessibilityService.kt android/app/src/main/java/com/ampil/app/VolumeAccessibilityService.kt
           cp -f MainActivity.kt android/app/src/main/java/com/ampil/app/MainActivity.kt
 
