@@ -3,6 +3,7 @@ package com.ampil.app
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.Activity
+import android.app.NotificationManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -27,17 +28,21 @@ import android.widget.TextView
  * MainActivity
  *
  * Provides service verification, direct accessibility activation intent,
- * and Android 13+ "Restricted Setting" unblocker.
+ * Android 13+ "Restricted Setting" unblocker, and Do Not Disturb / Notification Policy
+ * access for unrestricted full-power volume control.
  */
 class MainActivity : Activity() {
 
     private lateinit var statusBadge: TextView
     private lateinit var statusDescription: TextView
+    private lateinit var dndStatusText: TextView
     private lateinit var audioManager: AudioManager
+    private lateinit var notificationManager: NotificationManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
         val rootScrollView = ScrollView(this).apply {
             setBackgroundColor(Color.parseColor("#0A0A0A"))
@@ -46,7 +51,7 @@ class MainActivity : Activity() {
 
         val layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dpToPx(20), dpToPx(40), dpToPx(20), dpToPx(32))
+            setPadding(dpToPx(20), dpToPx(36), dpToPx(20), dpToPx(32))
             gravity = Gravity.CENTER_HORIZONTAL
         }
 
@@ -59,17 +64,17 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER
         }
         val subtitleText = TextView(this).apply {
-            text = "Hardware-free Gesture & Floating Volume Control"
+            text = "Full-Power Hardware-Free Volume & Gesture Engine"
             textSize = 13f
             setTextColor(Color.parseColor("#888888"))
             gravity = Gravity.CENTER
-            setPadding(0, dpToPx(4), 0, dpToPx(24))
+            setPadding(0, dpToPx(4), 0, dpToPx(20))
         }
 
         // Live Service Status Card
         val statusCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dpToPx(16), dpToPx(18), dpToPx(16), dpToPx(18))
+            setPadding(dpToPx(16), dpToPx(16), dpToPx(16), dpToPx(16))
             background = GradientDrawable().apply {
                 setColor(Color.parseColor("#141416"))
                 cornerRadius = dpToPx(18).toFloat()
@@ -93,15 +98,23 @@ class MainActivity : Activity() {
             textSize = 13f
             setTextColor(Color.parseColor("#AAAAAA"))
             gravity = Gravity.CENTER
-            setPadding(0, dpToPx(10), 0, 0)
+            setPadding(0, dpToPx(8), 0, 0)
+        }
+
+        dndStatusText = TextView(this).apply {
+            textSize = 12f
+            setTextColor(Color.parseColor("#34E0A1"))
+            gravity = Gravity.CENTER
+            setPadding(0, dpToPx(6), 0, 0)
         }
 
         statusCard.addView(statusBadge)
         statusCard.addView(statusDescription)
+        statusCard.addView(dndStatusText)
 
-        // Main Action: Enable Accessibility Button
+        // Action 1: Enable Accessibility Button
         val btnEnable = Button(this).apply {
-            text = "1. Open Accessibility Settings"
+            text = "1. Enable Accessibility Service"
             setTextColor(Color.WHITE)
             textSize = 15f
             typeface = Typeface.DEFAULT_BOLD
@@ -111,20 +124,42 @@ class MainActivity : Activity() {
             }
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                dpToPx(54)
+                dpToPx(52)
             ).apply {
-                setMargins(0, dpToPx(20), 0, dpToPx(12))
+                setMargins(0, dpToPx(18), 0, dpToPx(10))
             }
             setOnClickListener {
                 openAccessibilitySettings()
             }
         }
 
-        // Android 13+ Restricted Setting Helper Button
+        // Action 2: Grant DND / Notification Policy Access (Full Power for Ringer / Silent Mode)
+        val btnDndAccess = Button(this).apply {
+            text = "2. Grant Full DND & Ring Mode Power"
+            setTextColor(Color.parseColor("#34E0A1"))
+            textSize = 13.5f
+            typeface = Typeface.DEFAULT_BOLD
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#1A1A1D"))
+                cornerRadius = dpToPx(14).toFloat()
+                setStroke(dpToPx(1), Color.parseColor("#3334E0A1"))
+            }
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dpToPx(48)
+            ).apply {
+                setMargins(0, 0, 0, dpToPx(10))
+            }
+            setOnClickListener {
+                openNotificationPolicySettings()
+            }
+        }
+
+        // Action 3: Android 13+ Restricted Setting Helper Button
         val btnRestrictedSettings = Button(this).apply {
-            text = "⚠️ Sideloaded APK? Allow Restricted Settings"
+            text = "⚠️ Android 13+ Sideload? Allow Restricted Settings"
             setTextColor(Color.parseColor("#FFB52E"))
-            textSize = 13f
+            textSize = 12.5f
             typeface = Typeface.DEFAULT_BOLD
             background = GradientDrawable().apply {
                 setColor(Color.parseColor("#1A1A1D"))
@@ -133,9 +168,9 @@ class MainActivity : Activity() {
             }
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                dpToPx(48)
+                dpToPx(46)
             ).apply {
-                setMargins(0, 0, 0, dpToPx(20))
+                setMargins(0, 0, 0, dpToPx(16))
             }
             setOnClickListener {
                 openAppDetailsSettings()
@@ -158,7 +193,7 @@ class MainActivity : Activity() {
         }
 
         val guideTitle = TextView(this).apply {
-            text = "How to Enable on Android:"
+            text = "Full Volume Power Setup:"
             textSize = 14f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.WHITE)
@@ -166,8 +201,8 @@ class MainActivity : Activity() {
         }
 
         val guideSteps = TextView(this).apply {
-            text = "• If 'Ampil' is grayed out (Android 13+): Tap 'Allow Restricted Settings' above → tap 3-dots in top right → 'Allow restricted settings'.\n\n• Tap 'Open Accessibility Settings' → Installed Apps / Downloaded Services → Select 'Ampil' → Toggle ON.\n\n• The floating volume bubble will immediately appear on your screen."
-            textSize = 12.5f
+            text = "1. If toggle is grayed out: Tap 'Allow Restricted Settings' → 3-dots top right → 'Allow restricted settings'.\n\n2. Tap 'Enable Accessibility Service' → Select 'Ampil' → Toggle ON.\n\n3. Tap 'Grant Full DND & Ring Mode Power' to allow Ampil to control silent, vibrate, and ringer volume modes without restriction."
+            textSize = 12f
             setTextColor(Color.parseColor("#888899"))
             setLineSpacing(dpToPx(2).toFloat(), 1.1f)
         }
@@ -177,11 +212,11 @@ class MainActivity : Activity() {
 
         // Quick Test Section
         val testHeader = TextView(this).apply {
-            text = "Test Volume Control"
+            text = "Direct Audio Test Controls"
             textSize = 13.5f
             setTextColor(Color.parseColor("#777788"))
             typeface = Typeface.DEFAULT_BOLD
-            setPadding(0, dpToPx(24), 0, dpToPx(8))
+            setPadding(0, dpToPx(20), 0, dpToPx(8))
         }
 
         val testButtonsLayout = LinearLayout(this).apply {
@@ -194,13 +229,13 @@ class MainActivity : Activity() {
         }
 
         val btnLower = createTestButton("– Vol") {
-            audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_LOWER, AudioManager.FLAG_SHOW_UI)
+            audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_LOWER, AudioManager.FLAG_SHOW_UI or AudioManager.FLAG_PLAY_SOUND)
         }
         val btnRaise = createTestButton("+ Vol") {
-            audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_RAISE, AudioManager.FLAG_SHOW_UI)
+            audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_RAISE, AudioManager.FLAG_SHOW_UI or AudioManager.FLAG_PLAY_SOUND)
         }
         val btnPanel = createTestButton("Show Panel") {
-            audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_SAME, AudioManager.FLAG_SHOW_UI)
+            audioManager.adjustSuggestedStreamVolume(AudioManager.ADJUST_SAME, AudioManager.USE_DEFAULT_STREAM_TYPE, AudioManager.FLAG_SHOW_UI or AudioManager.FLAG_PLAY_SOUND)
         }
 
         testButtonsLayout.addView(btnLower)
@@ -211,6 +246,7 @@ class MainActivity : Activity() {
         layout.addView(subtitleText)
         layout.addView(statusCard)
         layout.addView(btnEnable)
+        layout.addView(btnDndAccess)
         layout.addView(btnRestrictedSettings)
         layout.addView(guideCard)
         layout.addView(testHeader)
@@ -236,6 +272,19 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun openNotificationPolicySettings() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val intent = Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                startActivity(intent)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     private fun openAppDetailsSettings() {
         try {
             val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
@@ -252,12 +301,10 @@ class MainActivity : Activity() {
      * Checks if VolumeAccessibilityService is currently enabled using multiple system checks.
      */
     fun isAccessibilityServiceEnabled(context: Context, serviceClass: Class<out AccessibilityService>): Boolean {
-        // 1. Direct in-memory running flag check
         if (VolumeAccessibilityService.isServiceRunning) {
             return true
         }
 
-        // 2. AccessibilityManager API check
         try {
             val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as? AccessibilityManager
             val enabledList = am?.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
@@ -271,10 +318,9 @@ class MainActivity : Activity() {
                 }
             }
         } catch (e: Exception) {
-            // Fallback to Settings.Secure
+            // Fallback
         }
 
-        // 3. Settings.Secure check
         try {
             val expectedServiceName = ComponentName(context, serviceClass).flattenToString()
             val shortExpected = ComponentName(context, serviceClass).flattenToShortString()
@@ -319,6 +365,12 @@ class MainActivity : Activity() {
                 cornerRadius = dpToPx(12).toFloat()
             }
             statusDescription.text = "Accessibility permission is required for on-screen controls."
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val hasDnd = notificationManager.isNotificationPolicyAccessGranted
+            dndStatusText.text = if (hasDnd) "✓ Full DND & Ringer Access Granted" else "⚠️ DND / Ringer Mode Access Not Granted (Optional)"
+            dndStatusText.setTextColor(if (hasDnd) Color.parseColor("#34E0A1") else Color.parseColor("#FFB52E"))
         }
     }
 
