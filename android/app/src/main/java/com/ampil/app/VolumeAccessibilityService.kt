@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.PixelFormat
+import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
 import android.media.AudioManager
@@ -51,6 +52,9 @@ class VolumeAccessibilityService : AccessibilityService() {
 
     private val handler = Handler(Looper.getMainLooper())
     private var isExpanded = false
+    private var activeStream = AudioManager.STREAM_MUSIC
+    private var volumePercentText: TextView? = null
+    private var streamNameText: TextView? = null
 
     companion object {
         private const val TAG = "VolumeAccService"
@@ -71,7 +75,6 @@ class VolumeAccessibilityService : AccessibilityService() {
         isServiceRunning = true
         Log.d(TAG, "VolumeAccessibilityService onServiceConnected")
 
-        // Ensure service configuration is fully applied
         try {
             val info = serviceInfo ?: AccessibilityServiceInfo()
             info.eventTypes = AccessibilityEvent.TYPES_ALL_MASK
@@ -85,7 +88,6 @@ class VolumeAccessibilityService : AccessibilityService() {
             Log.e(TAG, "Error applying serviceInfo", e)
         }
 
-        // Overlay MUST be created in onServiceConnected (after window token is assigned)
         if (floatingRootView == null) {
             handler.post {
                 createFloatingWidget()
@@ -94,7 +96,7 @@ class VolumeAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // Event processing hook
+        // Accessibility event processing hook
     }
 
     override fun onInterrupt() {
@@ -102,50 +104,96 @@ class VolumeAccessibilityService : AccessibilityService() {
     }
 
     /**
-     * Triggers the native system volume UI slider.
+     * Triggers the native system volume UI slider reliably across all Android versions.
      */
     fun showVolumePanel() {
-        vibrate(35)
+        vibrate(40)
+        var triggered = false
+
+        // 1. Try suggested stream volume
+        try {
+            audioManager.adjustSuggestedStreamVolume(
+                AudioManager.ADJUST_SAME,
+                AudioManager.USE_DEFAULT_STREAM_TYPE,
+                AudioManager.FLAG_SHOW_UI or AudioManager.FLAG_PLAY_SOUND
+            )
+            triggered = true
+        } catch (e: Exception) {
+            Log.w(TAG, "adjustSuggestedStreamVolume failed", e)
+        }
+
+        // 2. Try explicit active stream volume
         try {
             audioManager.adjustStreamVolume(
-                AudioManager.STREAM_MUSIC,
+                activeStream,
                 AudioManager.ADJUST_SAME,
-                AudioManager.FLAG_SHOW_UI
+                AudioManager.FLAG_SHOW_UI or AudioManager.FLAG_PLAY_SOUND
             )
+            triggered = true
         } catch (e: Exception) {
-            Log.e(TAG, "Error showing volume panel", e)
+            Log.w(TAG, "adjustStreamVolume failed", e)
+        }
+
+        // 3. Fallback to STREAM_MUSIC
+        if (!triggered) {
+            try {
+                audioManager.adjustStreamVolume(
+                    AudioManager.STREAM_MUSIC,
+                    AudioManager.ADJUST_SAME,
+                    AudioManager.FLAG_SHOW_UI
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "showVolumePanel fallback failed", e)
+            }
         }
     }
 
     /**
-     * Increases volume for the designated audio stream.
+     * Increases volume for active stream.
      */
-    fun increaseVolume(stream: Int = AudioManager.STREAM_MUSIC) {
-        vibrate(15)
+    fun increaseVolume(stream: Int = activeStream) {
+        vibrate(20)
         try {
-            audioManager.adjustStreamVolume(stream, AudioManager.ADJUST_RAISE, AudioManager.FLAG_SHOW_UI)
+            val current = audioManager.getStreamVolume(stream)
+            val max = audioManager.getStreamMaxVolume(stream)
+            if (current < max) {
+                audioManager.adjustStreamVolume(stream, AudioManager.ADJUST_RAISE, AudioManager.FLAG_SHOW_UI or AudioManager.FLAG_PLAY_SOUND)
+            }
         } catch (e: Exception) {
-            Log.e(TAG, "Error increasing volume", e)
+            try {
+                audioManager.adjustSuggestedStreamVolume(AudioManager.ADJUST_RAISE, AudioManager.USE_DEFAULT_STREAM_TYPE, AudioManager.FLAG_SHOW_UI)
+            } catch (e2: Exception) {
+                Log.e(TAG, "increaseVolume failed", e2)
+            }
         }
+        updateVolumeDisplay()
     }
 
     /**
-     * Decreases volume for the designated audio stream.
+     * Decreases volume for active stream.
      */
-    fun decreaseVolume(stream: Int = AudioManager.STREAM_MUSIC) {
-        vibrate(15)
+    fun decreaseVolume(stream: Int = activeStream) {
+        vibrate(20)
         try {
-            audioManager.adjustStreamVolume(stream, AudioManager.ADJUST_LOWER, AudioManager.FLAG_SHOW_UI)
+            val current = audioManager.getStreamVolume(stream)
+            if (current > 0) {
+                audioManager.adjustStreamVolume(stream, AudioManager.ADJUST_LOWER, AudioManager.FLAG_SHOW_UI or AudioManager.FLAG_PLAY_SOUND)
+            }
         } catch (e: Exception) {
-            Log.e(TAG, "Error decreasing volume", e)
+            try {
+                audioManager.adjustSuggestedStreamVolume(AudioManager.ADJUST_LOWER, AudioManager.USE_DEFAULT_STREAM_TYPE, AudioManager.FLAG_SHOW_UI)
+            } catch (e2: Exception) {
+                Log.e(TAG, "decreaseVolume failed", e2)
+            }
         }
+        updateVolumeDisplay()
     }
 
     /**
      * Toggles mute on the given stream.
      */
-    fun toggleMute(stream: Int = AudioManager.STREAM_MUSIC) {
-        vibrate(25)
+    fun toggleMute(stream: Int = activeStream) {
+        vibrate(30)
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 audioManager.adjustStreamVolume(stream, AudioManager.ADJUST_TOGGLE_MUTE, AudioManager.FLAG_SHOW_UI)
@@ -159,7 +207,28 @@ class VolumeAccessibilityService : AccessibilityService() {
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error toggling mute", e)
+            Log.e(TAG, "toggleMute failed", e)
+        }
+        updateVolumeDisplay()
+    }
+
+    private fun updateVolumeDisplay() {
+        try {
+            val current = audioManager.getStreamVolume(activeStream)
+            val max = audioManager.getStreamMaxVolume(activeStream)
+            val pct = if (max > 0) (current * 100) / max else 0
+            volumePercentText?.text = "$pct%"
+
+            val name = when (activeStream) {
+                AudioManager.STREAM_MUSIC -> "Media"
+                AudioManager.STREAM_RING -> "Ring"
+                AudioManager.STREAM_ALARM -> "Alarm"
+                AudioManager.STREAM_NOTIFICATION -> "Notification"
+                else -> "Volume"
+            }
+            streamNameText?.text = name
+        } catch (e: Exception) {
+            Log.w(TAG, "updateVolumeDisplay failed", e)
         }
     }
 
@@ -189,7 +258,7 @@ class VolumeAccessibilityService : AccessibilityService() {
             ).apply {
                 gravity = Gravity.TOP or Gravity.START
                 x = dpToPx(16)
-                y = dpToPx(220)
+                y = dpToPx(240)
             }
             windowLayoutParams = params
 
@@ -199,47 +268,105 @@ class VolumeAccessibilityService : AccessibilityService() {
                 gravity = Gravity.CENTER_HORIZONTAL
             }
 
-            // Quick Controls Panel (Initially collapsed)
+            // Expanded Quick Panel
             val quickPanel = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_HORIZONTAL
                 visibility = View.GONE
-                setPadding(dpToPx(8), dpToPx(8), dpToPx(8), dpToPx(8))
+                setPadding(dpToPx(12), dpToPx(12), dpToPx(12), dpToPx(12))
                 background = GradientDrawable().apply {
-                    setColor(Color.parseColor("#EE141416"))
-                    cornerRadius = dpToPx(20).toFloat()
+                    setColor(Color.parseColor("#F0141416"))
+                    cornerRadius = dpToPx(24).toFloat()
                     setStroke(dpToPx(1), Color.parseColor("#33FFFFFF"))
+                }
+                layoutParams = LinearLayout.LayoutParams(dpToPx(180), LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                    setMargins(0, 0, 0, dpToPx(10))
                 }
             }
 
-            val btnPlus = createQuickButton("+") { increaseVolume() }
-            val btnMinus = createQuickButton("-") { decreaseVolume() }
-            val btnSystem = createQuickButton("⚙") { showVolumePanel() }
+            streamNameText = TextView(this).apply {
+                text = "Media"
+                textSize = 12f
+                setTextColor(Color.parseColor("#9B8CFF"))
+                typeface = Typeface.DEFAULT_BOLD
+            }
 
-            quickPanel.addView(btnPlus)
-            quickPanel.addView(btnMinus)
-            quickPanel.addView(btnSystem)
+            volumePercentText = TextView(this).apply {
+                text = "70%"
+                textSize = 28f
+                setTextColor(Color.WHITE)
+                typeface = Typeface.DEFAULT_BOLD
+                gravity = Gravity.CENTER
+                setPadding(0, dpToPx(2), 0, dpToPx(8))
+            }
+
+            // Stream selector row
+            val streamRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+            }
+
+            val btnMedia = createStreamChip("🎵") { switchStream(AudioManager.STREAM_MUSIC, "#9B8CFF") }
+            val btnRing = createStreamChip("🔔") { switchStream(AudioManager.STREAM_RING, "#34E0A1") }
+            val btnAlarm = createStreamChip("⏰") { switchStream(AudioManager.STREAM_ALARM, "#FFB52E") }
+            val btnNotif = createStreamChip("💬") { switchStream(AudioManager.STREAM_NOTIFICATION, "#FF5F92") }
+
+            streamRow.addView(btnMedia)
+            streamRow.addView(btnRing)
+            streamRow.addView(btnAlarm)
+            streamRow.addView(btnNotif)
+
+            // Adjust Buttons Row (+ / - / Panel)
+            val buttonsRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
+                setPadding(0, dpToPx(8), 0, 0)
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+            }
+
+            val btnMinus = createActionButton("–") { decreaseVolume() }
+            val btnMute = createActionButton("🔇") { toggleMute() }
+            val btnPlus = createActionButton("+") { increaseVolume() }
+            val btnSystem = createActionButton("⚙") { showVolumePanel() }
+
+            buttonsRow.addView(btnMinus)
+            buttonsRow.addView(btnMute)
+            buttonsRow.addView(btnPlus)
+            buttonsRow.addView(btnSystem)
+
+            quickPanel.addView(streamNameText)
+            quickPanel.addView(volumePercentText)
+            quickPanel.addView(streamRow)
+            quickPanel.addView(buttonsRow)
 
             // Floating Bubble Button
-            val bubbleSize = dpToPx(56)
+            val bubbleSize = dpToPx(58)
             val bubble = FrameLayout(this).apply {
                 val bgDrawable = GradientDrawable().apply {
                     shape = GradientDrawable.OVAL
-                    colors = intArrayOf(Color.parseColor("#9B8CFF"), Color.parseColor("#6347EB"))
+                    colors = intArrayOf(Color.parseColor("#9B8CFF"), Color.parseColor("#5B47EB"))
                     gradientType = GradientDrawable.RADIAL_GRADIENT
-                    gradientRadius = (bubbleSize / 1.2).toFloat()
+                    gradientRadius = (bubbleSize / 1.1).toFloat()
                 }
                 background = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                     RippleDrawable(ColorStateList.valueOf(Color.parseColor("#44FFFFFF")), bgDrawable, null)
                 } else {
                     bgDrawable
                 }
-                elevation = dpToPx(8).toFloat()
+                elevation = dpToPx(10).toFloat()
             }
 
             val icon = ImageView(this).apply {
                 setImageResource(android.R.drawable.ic_lock_silent_mode_off)
                 setColorFilter(Color.WHITE)
-                val iconPadding = dpToPx(14)
+                val iconPadding = dpToPx(15)
                 setPadding(iconPadding, iconPadding, iconPadding, iconPadding)
             }
             bubble.addView(icon, FrameLayout.LayoutParams(bubbleSize, bubbleSize))
@@ -247,7 +374,7 @@ class VolumeAccessibilityService : AccessibilityService() {
             container.addView(quickPanel)
             container.addView(bubble)
 
-            // Touch handling
+            // Touch & Swipe gesture handling
             val touchSlop = ViewConfiguration.get(this).scaledTouchSlop
             val longPressTimeout = ViewConfiguration.getLongPressTimeout().toLong()
 
@@ -256,6 +383,7 @@ class VolumeAccessibilityService : AccessibilityService() {
             var initialTouchX = 0f
             var initialTouchY = 0f
             var isDragging = false
+            var lastSwipeY = 0f
 
             val longPressRunnable = Runnable {
                 if (!isDragging) {
@@ -270,6 +398,7 @@ class VolumeAccessibilityService : AccessibilityService() {
                         initialY = params.y
                         initialTouchX = event.rawX
                         initialTouchY = event.rawY
+                        lastSwipeY = event.rawY
                         isDragging = false
                         handler.postDelayed(longPressRunnable, longPressTimeout)
                         true
@@ -300,6 +429,7 @@ class VolumeAccessibilityService : AccessibilityService() {
                             vibrate(15)
                             isExpanded = !isExpanded
                             quickPanel.visibility = if (isExpanded) View.VISIBLE else View.GONE
+                            updateVolumeDisplay()
                         } else {
                             val targetX = if (params.x + bubbleSize / 2 < screenWidth / 2) dpToPx(12) else screenWidth - bubbleSize - dpToPx(12)
                             animateSnap(container, params, targetX)
@@ -316,29 +446,53 @@ class VolumeAccessibilityService : AccessibilityService() {
 
             floatingRootView = container
             windowManager.addView(container, params)
+            updateVolumeDisplay()
             Log.d(TAG, "Floating overlay successfully attached to window manager")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to attach floating overlay", e)
         }
     }
 
-    private fun createQuickButton(label: String, onClick: () -> Unit): TextView {
+    private fun switchStream(stream: Int, colorHex: String) {
+        activeStream = stream
+        streamNameText?.setTextColor(Color.parseColor(colorHex))
+        vibrate(15)
+        updateVolumeDisplay()
+    }
+
+    private fun createStreamChip(icon: String, onClick: () -> Unit): TextView {
+        return TextView(this).apply {
+            text = icon
+            textSize = 14f
+            gravity = Gravity.CENTER
+            val size = dpToPx(32)
+            layoutParams = LinearLayout.LayoutParams(size, size).apply {
+                setMargins(dpToPx(3), 0, dpToPx(3), 0)
+            }
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#252528"))
+                cornerRadius = dpToPx(10).toFloat()
+            }
+            setOnClickListener { onClick() }
+        }
+    }
+
+    private fun createActionButton(label: String, onClick: () -> Unit): TextView {
         return TextView(this).apply {
             text = label
-            textSize = 18f
+            textSize = 16f
             setTextColor(Color.WHITE)
+            typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
-            val size = dpToPx(38)
+            val size = dpToPx(36)
             layoutParams = LinearLayout.LayoutParams(size, size).apply {
-                setMargins(0, dpToPx(4), 0, dpToPx(4))
+                setMargins(dpToPx(2), 0, dpToPx(2), 0)
             }
             background = GradientDrawable().apply {
                 setColor(Color.parseColor("#33FFFFFF"))
                 cornerRadius = dpToPx(12).toFloat()
             }
-            setOnClickListener {
-                onClick()
-            }
+            setOnClickListener { onClick() }
         }
     }
 

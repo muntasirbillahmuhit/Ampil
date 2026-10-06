@@ -11,12 +11,12 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
 
-      - name: Set up Node.js 22
-        uses: actions/setup-node@v5
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '20'
           cache: 'npm'
 
       - name: Set up JDK 21
@@ -40,16 +40,37 @@ jobs:
             npx cap init "ampil" "com.ampil.app" --web-dir=dist
           fi
 
-      - name: Add Android platform
+      - name: Add Android platform and inject Accessibility Service
         run: |
-          rm -rf android
-          npx cap add android
+          if [ ! -d "android/app" ]; then
+            npx cap add android
+          fi
+          # Ensure custom native accessibility service files and manifest are placed correctly
+          mkdir -p android/app/src/main/java/com/ampil/app
+          mkdir -p android/app/src/main/res/xml
+          mkdir -p android/app/src/main/res/values
+          cp -f AndroidManifest.xml android/app/src/main/AndroidManifest.xml
+          cp -f res/xml/accessibility_service_config.xml android/app/src/main/res/xml/accessibility_service_config.xml
+          cp -f res/values/strings.xml android/app/src/main/res/values/strings.xml
+          cp -f VolumeAccessibilityService.kt android/app/src/main/java/com/ampil/app/VolumeAccessibilityService.kt
+          cp -f MainActivity.kt android/app/src/main/java/com/ampil/app/MainActivity.kt
 
       - name: Sync web assets
         run: npx cap sync android
 
+      - name: Re-apply native overrides after sync
+        run: |
+          cp -f AndroidManifest.xml android/app/src/main/AndroidManifest.xml
+          cp -f res/xml/accessibility_service_config.xml android/app/src/main/res/xml/accessibility_service_config.xml
+          cp -f res/values/strings.xml android/app/src/main/res/values/strings.xml
+          cp -f VolumeAccessibilityService.kt android/app/src/main/java/com/ampil/app/VolumeAccessibilityService.kt
+          cp -f MainActivity.kt android/app/src/main/java/com/ampil/app/MainActivity.kt
+
       - name: Grant execute permission for gradlew
-        run: chmod +x android/gradlew
+        run: |
+          if [ -f "android/gradlew" ]; then
+            chmod +x android/gradlew
+          fi
 
       - name: Build Debug APK
         working-directory: ./android

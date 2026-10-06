@@ -1,0 +1,6 @@
+{
+  "appId": "com.ampil.app",
+  "appName": "ampil",
+  "webDir": "dist",
+  "bundledWebRuntime": false
+}
